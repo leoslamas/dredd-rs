@@ -119,7 +119,7 @@ impl Rule<ChainRule> for ChainRule {
     }
 
     fn add_child(&mut self, rule: Wrapper<ChainRule>) {
-        if self.children.len() > 0 {
+        if !self.children.is_empty() {
             panic!("Chain rule can only have one child");
         }
         self.children.push(rule);
