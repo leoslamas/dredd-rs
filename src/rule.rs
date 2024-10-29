@@ -113,3 +113,78 @@ pub trait RuleChildren {
     fn add_child(&mut self, rule: Wrapper<Self::RuleType>) -> Wrapper<Self::RuleType>;
     fn add_children(&mut self, rules: Vec<Wrapper<Self::RuleType>>) -> Wrapper<Self::RuleType>;
 }
+
+#[derive(Clone)]
+pub struct BaseRule<T> {
+    rule_context: Option<RuleContextWrapper>,
+    children: Vec<Wrapper<T>>, // Usar Self permite que a struct seja genérica
+    eval: Wrapper<dyn Fn(&mut T) -> bool>,
+    pre_execute: Wrapper<dyn Fn(&mut T)>,
+    execute: Wrapper<dyn Fn(&mut T)>,
+    post_execute: Wrapper<dyn Fn(&mut T)>,
+}
+
+impl<T> BaseRule<T> {
+    pub fn new() -> Wrapper<Self> {
+        wrap(BaseRule {
+            rule_context: None,
+            children: Vec::new(),
+            eval: wrap(|_: &mut T| true),
+            pre_execute: wrap(|_: &mut T| ()),
+            execute: wrap(|_: &mut T| ()),
+            post_execute: wrap(|_: &mut T| ()),
+        })
+    }
+
+    pub fn get_eval(&self) -> Wrapper<dyn Fn(&mut T) -> bool> {
+        self.eval.clone()
+    }
+
+    pub fn set_eval(&mut self, eval: impl Fn(&mut T) -> bool + 'static) {
+        self.eval = wrap(eval);
+    }
+
+    pub fn get_pre_execute(&self) -> Wrapper<dyn Fn(&mut T)> {
+        self.pre_execute.clone()
+    }
+
+    pub fn set_pre_execute(&mut self, pre_execute: impl Fn(&mut T) + 'static) {
+        self.pre_execute = wrap(pre_execute);
+    }
+
+    pub fn get_execute(&self) -> Wrapper<dyn Fn(&mut T)> {
+        self.execute.clone()
+    }
+
+    pub fn set_execute(&mut self, execute: impl Fn(&mut T) + 'static) {
+        self.execute = wrap(execute);
+    }
+
+    pub fn get_post_execute(&self) -> Wrapper<dyn Fn(&mut T)> {
+        self.post_execute.clone()
+    }
+
+    pub fn set_post_execute(&mut self, post_execute: impl Fn(&mut T) + 'static) {
+        self.post_execute = wrap(post_execute);
+    }
+
+    pub fn get_rule_context(&self) -> Option<RuleContextWrapper> {
+        self.rule_context.clone()
+    }
+
+    pub fn set_rule_context(&mut self, rule_context: RuleContextWrapper) {
+        self.rule_context = Some(rule_context);
+    }
+
+    pub fn get_children(&self) -> Vec<Wrapper<T>> {
+        self.children.clone()
+    }
+
+    pub fn add_children(&mut self, rules: Vec<Wrapper<T>>) {
+        self.children.extend(rules);
+    }
+
+    pub fn add_child(&mut self, rule: Wrapper<T>) {
+        self.children.push(rule);
+    }
+}
