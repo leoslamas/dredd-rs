@@ -49,26 +49,26 @@ use dredd_rs::rule::*;
 let mut rule = ChainRule::new();
 let mut rule2 = ChainRule::new();
 
-rule.on_eval(|this| {
+rule.on_eval(|ctx| {
    println!("Eval Chain Rule 1")
-   let should_run = this.get_rule_context().get::<bool>("test").unwrap();
+   let should_run = ctx.get_rule_context().get::<bool>("test").unwrap();
    should_run //true
 })
-.on_pre_execute(|this| {
+.on_pre_execute(|ctx| {
    println!("Pre Chain Rule 1");
 })
-.on_execute(|this| {
+.on_execute(|ctx| {
    println!("Execute Chain Rule 1");
 })
-.on_post_execute(|this| {
+.on_post_execute(|ctx| {
    println!("Post Chain Rule 1");
 })
 .add_child(
-   rule2.on_eval(|this| {
+   rule2.on_eval(|ctx| {
       println!("Eval Chain Rule 2")
       false
    })
-   .on_execute(|this| {
+   .on_execute(|ctx| {
       println!("Execute Chain Rule 2");
    })
 );
