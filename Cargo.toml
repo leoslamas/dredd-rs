@@ -2,7 +2,7 @@
 name = "dredd-rs"
 authors = ["Leonardo Lamas <leoslamas@gmail.com>"]
 description = "A simple rules engine for Rust, adapted from the Dredd implementation for Android."
-version = "0.1.8"
+version = "0.2.0"
 edition = "2021"
 readme = "README.md"
 documentation = "https://docs.rs/dredd-rs"

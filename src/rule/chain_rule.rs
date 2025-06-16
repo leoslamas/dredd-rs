@@ -1,11 +1,7 @@
-use crate::{engine::Engine, runner::RuleRunner as _};
+use crate::rule::{Rule, RuleResult, RuleError, RuleContext, EvalFn, ExecuteFn};
 
-use super::{wrap, Rule, RuleCallback, RuleChildren, RuleContextWrapper, Wrapper};
-
-/// Represents a chain rule in the rule evaluation system.
-///
-/// A `ChainRule` consists of a context, a list of child rules, and several
-/// function wrappers for evaluation and execution phases.
+/// ChainRule represents a rule that can have at most one child.
+/// When executed, it will run its child rule if the evaluation succeeds.
 ///
 /// # Example
 ///
@@ -13,226 +9,225 @@ use super::{wrap, Rule, RuleCallback, RuleChildren, RuleContextWrapper, Wrapper}
 /// use dredd_rs::rule::*;
 ///
 /// let mut rule = ChainRule::new();
-/// let rule2 = ChainRule::new();
+/// rule.set_eval_fn(|context| {
+///     context.get_bool("should_execute")
+/// });
+/// rule.set_execute_fn(|context| {
+///     context.set_bool("executed", true);
+///     Ok(())
+/// });
 ///
-/// rule.on_eval(|_| {
-///     println!("Eval");
-///     true
-/// })
-/// .on_pre_execute(|_| {
-///    println!("Pre Execute");
-/// })
-/// .on_execute(|_| {
-///   println!("Execute");
-/// })
-/// .on_post_execute(|_| {
-///  println!("Post Execute");
-/// })
-/// .add_child(rule2);
-///
-/// Engine::chain_runner().run(RuleContext::new(), vec![rule]);
+/// let mut context = RuleContext::new();
+/// context.set_bool("should_execute", true);
+/// 
+/// let result = rule.fire(&mut context).unwrap();
+/// assert!(result);
 /// ```
-///
-#[derive(Clone)]
 pub struct ChainRule {
-    rule_context: Option<RuleContextWrapper>,
-    children: Vec<Wrapper<ChainRule>>,
-    eval: Wrapper<dyn Fn(&mut Self) -> bool>,
-    pre_execute: Wrapper<dyn Fn(&mut Self)>,
-    execute: Wrapper<dyn Fn(&mut Self)>,
-    post_execute: Wrapper<dyn Fn(&mut Self)>,
+    child: Option<Box<dyn Rule>>,
+    eval_fn: Option<EvalFn>,
+    pre_execute_fn: Option<ExecuteFn>,
+    execute_fn: Option<ExecuteFn>,
+    post_execute_fn: Option<ExecuteFn>,
 }
 
 impl ChainRule {
-    pub fn new() -> Wrapper<Self> {
-        wrap(ChainRule {
-            rule_context: None,
-            children: Vec::new(),
-            eval: wrap(|_: &mut Self| true),
-            pre_execute: wrap(|_: &mut Self| ()),
-            execute: wrap(|_: &mut Self| ()),
-            post_execute: wrap(|_: &mut Self| ()),
-        })
+    /// Create a new ChainRule
+    pub fn new() -> Self {
+        ChainRule {
+            child: None,
+            eval_fn: None,
+            pre_execute_fn: None,
+            execute_fn: None,
+            post_execute_fn: None,
+        }
     }
 
-    pub fn on_eval(&mut self, eval: impl Fn(&mut Self) -> bool + 'static) {
-        self.eval = wrap(eval);
+    /// Create a builder for ChainRule
+    pub fn builder() -> ChainRuleBuilder {
+        ChainRuleBuilder::new()
     }
 
-    pub fn on_pre_execute(&mut self, pre_execute: impl Fn(&mut Self) + 'static) {
-        self.pre_execute = wrap(pre_execute);
+    /// Set the evaluation function
+    pub fn set_eval_fn<F>(&mut self, f: F) -> &mut Self
+    where 
+        F: Fn(&RuleContext) -> RuleResult<bool> + 'static
+    {
+        self.eval_fn = Some(Box::new(f));
+        self
     }
 
-    pub fn on_execute(&mut self, execute: impl Fn(&mut Self) + 'static) {
-        self.execute = wrap(execute);
+    /// Set the pre-execution function
+    pub fn set_pre_execute_fn<F>(&mut self, f: F) -> &mut Self
+    where 
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    {
+        self.pre_execute_fn = Some(Box::new(f));
+        self
     }
 
-    pub fn on_post_execute(&mut self, post_execute: impl Fn(&mut Self) + 'static) {
-        self.post_execute = wrap(post_execute);
+    /// Set the execution function
+    pub fn set_execute_fn<F>(&mut self, f: F) -> &mut Self
+    where 
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static  
+    {
+        self.execute_fn = Some(Box::new(f));
+        self
+    }
+
+    /// Set the post-execution function
+    pub fn set_post_execute_fn<F>(&mut self, f: F) -> &mut Self
+    where 
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    {
+        self.post_execute_fn = Some(Box::new(f));
+        self
+    }
+
+    /// Add a child rule (ChainRule can only have one child)
+    pub fn set_child(&mut self, child: Box<dyn Rule>) -> RuleResult<&mut Self> {
+        if self.child.is_some() {
+            return Err(RuleError::TooManyChildren { max: 1, attempted: 2 });
+        }
+        self.child = Some(child);
+        Ok(self)
     }
 }
 
-impl Rule<ChainRule> for ChainRule {
-    fn fire(&mut self) -> bool {
-        if self.run_eval() {
-            self.run_pre_execute();
-            self.run_execute();
-            self.run_post_execute();
-            self.run_children();
+impl Rule for ChainRule {
+    fn evaluate(&self, context: &RuleContext) -> RuleResult<bool> {
+        match &self.eval_fn {
+            Some(f) => f(context),
+            None => Ok(true), // Default: always evaluate to true
         }
-        true
     }
 
-    fn run_eval(&self) -> bool {
-        (self.eval.borrow_mut())(&mut self.clone())
-    }
-
-    fn run_pre_execute(&mut self) {
-        (self.pre_execute.borrow_mut())(&mut self.clone());
-    }
-
-    fn run_execute(&mut self) {
-        (self.execute.borrow_mut())(&mut self.clone());
-    }
-
-    fn run_post_execute(&mut self) {
-        (self.post_execute.borrow_mut())(&mut self.clone());
-    }
-
-    fn set_rule_context(&mut self, rule_context: RuleContextWrapper) {
-        self.rule_context = Some(rule_context);
-    }
-
-    fn get_rule_context(&mut self) -> RuleContextWrapper {
-        self.rule_context.clone().unwrap()
-    }
-
-    fn run_children(&mut self) {
-        let children = self.get_children();
-        let rule_context = self.get_rule_context();
-
-        Engine::chain_runner().run(rule_context, children);
-    }
-
-    fn get_children(&mut self) -> Vec<Wrapper<ChainRule>> {
-        self.children.clone()
-    }
-
-    fn add_child(&mut self, rule: Wrapper<ChainRule>) {
-        if !self.children.is_empty() {
-            panic!("Chain rule can only have one child");
+    fn execute(&mut self, context: &mut RuleContext) -> RuleResult<()> {
+        // Pre-execute
+        if let Some(f) = &self.pre_execute_fn {
+            f(context)?;
         }
-        self.children.push(rule);
+
+        // Main execute
+        if let Some(f) = &self.execute_fn {
+            f(context)?;
+        }
+
+        // Post-execute
+        if let Some(f) = &self.post_execute_fn {
+            f(context)?;
+        }
+
+        Ok(())
     }
 
-    fn add_children(&mut self, rules: Vec<Wrapper<ChainRule>>) {
-        if self.children.len() + rules.len() > 1 {
-            panic!("Chain rule can only have one child.");
+    fn children(&self) -> &[Box<dyn Rule>] {
+        match &self.child {
+            Some(child) => std::slice::from_ref(child),
+            None => &[],
         }
-        self.children.extend(rules);
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Box<dyn Rule>> {
+        // This is a bit tricky for ChainRule since it has at most one child
+        // We'll implement it differently in the fire method
+        unimplemented!("ChainRule uses custom child execution in fire()")
+    }
+
+    fn add_child(&mut self, child: Box<dyn Rule>) -> RuleResult<()> {
+        if self.child.is_some() {
+            return Err(RuleError::TooManyChildren { max: 1, attempted: 2 });
+        }
+        self.child = Some(child);
+        Ok(())
+    }
+
+    /// Custom fire implementation for ChainRule that handles single child execution
+    fn fire(&mut self, context: &mut RuleContext) -> RuleResult<bool> {
+        if self.evaluate(context)? {
+            self.execute(context)?;
+            
+            // Execute the single child if it exists
+            if let Some(child) = &mut self.child {
+                child.fire(context)?;
+            }
+            
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 
-/// Implementation of the `RuleHelper` trait for `Wrapper<ChainRule>`.
-///
-/// This implementation provides methods to set evaluation, pre-execution,
-/// execution, and post-execution functions for a `ChainRule` wrapped in a `Wrapper`.
-///
-/// # Type Parameters
-/// - `RuleType`: The type of rule being wrapped, which is `ChainRule` in this case.
-///
-/// # Methods
-/// - `on_eval`: Sets the evaluation function for the rule.
-/// - `on_pre_execute`: Sets the pre-execution function for the rule.
-/// - `on_execute`: Sets the execution function for the rule.
-/// - `on_post_execute`: Sets the post-execution function for the rule.
-///
-/// Each method takes a closure that operates on a mutable reference to the rule
-/// and returns a cloned `Wrapper` containing the rule.
-impl RuleCallback for Wrapper<ChainRule> {
-    type RuleType = ChainRule;
-
-    /// Sets the evaluation function for the rule.
-    fn on_eval(
-        &mut self,
-        eval: impl Fn(&mut Self::RuleType) -> bool + 'static,
-    ) -> Wrapper<Self::RuleType> {
-        self.borrow_mut().eval = wrap(eval);
-        self.clone()
-    }
-
-    /// Sets the pre-execution function for the rule.
-    fn on_pre_execute(
-        &mut self,
-        pre_execute: impl Fn(&mut Self::RuleType) + 'static,
-    ) -> Wrapper<Self::RuleType> {
-        self.borrow_mut().pre_execute = wrap(pre_execute);
-        self.clone()
-    }
-
-    /// Sets the execution function for the rule.
-    fn on_execute(
-        &mut self,
-        execute: impl Fn(&mut Self::RuleType) + 'static,
-    ) -> Wrapper<Self::RuleType> {
-        self.borrow_mut().execute = wrap(execute);
-        self.clone()
-    }
-
-    /// Sets the post-execution function for the rule.
-    fn on_post_execute(
-        &mut self,
-        post_execute: impl Fn(&mut Self::RuleType) + 'static,
-    ) -> Wrapper<Self::RuleType> {
-        self.borrow_mut().post_execute = wrap(post_execute);
-        self.clone()
+impl Default for ChainRule {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-/// Implementation of the `AddChild` trait for `Wrapper<ChainRule>`.
-///
-/// This implementation allows adding child rules to a `ChainRule` wrapped in a `Wrapper`.
-///
-/// # Associated Types
-/// - `RuleType`: The type of the rule, which is `ChainRule`.
-///
-/// # Methods
-///
-/// - `add_child(&mut self, rule: Wrapper<Self::RuleType>) -> Wrapper<Self::RuleType>`:
-///   Adds a single child rule to the current `ChainRule` and returns a clone of the updated `ChainRule`.
-///
-/// - `add_children(&mut self, rules: Vec<Wrapper<Self::RuleType>>) -> Wrapper<Self::RuleType>`:
-///   Adds multiple child rules to the current `ChainRule` and returns a clone of the updated `ChainRule`.
-///
-/// Both methods internally mutate the current `ChainRule` by adding the provided child rule(s) and then return a clone of the updated `ChainRule`.
-impl RuleChildren for Wrapper<ChainRule> {
-    type RuleType = ChainRule;
+/// Builder for ChainRule to provide a more ergonomic API
+pub struct ChainRuleBuilder {
+    rule: ChainRule,
+}
 
-    /// Adds a single child rule to the current instance and returns a clone of the updated instance.
-    ///
-    /// # Arguments
-    ///
-    /// * `rule` - A `Wrapper` containing the child rule to be added.
-    ///
-    /// # Returns
-    ///
-    /// A `Wrapper` containing a clone of the updated instance.
-    fn add_child(&mut self, rule: Wrapper<Self::RuleType>) -> Wrapper<Self::RuleType> {
-        self.borrow_mut().add_child(rule);
-        self.clone()
+impl ChainRuleBuilder {
+    /// Create a new ChainRuleBuilder
+    pub fn new() -> Self {
+        ChainRuleBuilder {
+            rule: ChainRule::new(),
+        }
     }
 
-    /// Adds multiple child rules to the current instance and returns a clone of the updated instance.
-    ///
-    /// # Arguments
-    ///
-    /// * `rules` - A vector of `Wrapper` containing the child rules to be added.
-    ///
-    /// # Returns
-    ///
-    /// A `Wrapper` containing a clone of the updated instance.
-    fn add_children(&mut self, rules: Vec<Wrapper<Self::RuleType>>) -> Wrapper<Self::RuleType> {
-        self.borrow_mut().add_children(rules);
-        self.clone()
+    /// Set the evaluation function
+    pub fn eval_fn<F>(mut self, f: F) -> Self
+    where 
+        F: Fn(&RuleContext) -> RuleResult<bool> + 'static
+    {
+        self.rule.set_eval_fn(f);
+        self
+    }
+
+    /// Set the pre-execution function
+    pub fn pre_execute_fn<F>(mut self, f: F) -> Self
+    where 
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    {
+        self.rule.set_pre_execute_fn(f);
+        self
+    }
+
+    /// Set the execution function
+    pub fn execute_fn<F>(mut self, f: F) -> Self
+    where 
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static  
+    {
+        self.rule.set_execute_fn(f);
+        self
+    }
+
+    /// Set the post-execution function
+    pub fn post_execute_fn<F>(mut self, f: F) -> Self
+    where 
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    {
+        self.rule.set_post_execute_fn(f);
+        self
+    }
+
+    /// Add a child rule
+    pub fn child(mut self, child: Box<dyn Rule>) -> RuleResult<Self> {
+        self.rule.add_child(child)?;
+        Ok(self)
+    }
+
+    /// Build the ChainRule
+    pub fn build(self) -> ChainRule {
+        self.rule
+    }
+}
+
+impl Default for ChainRuleBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

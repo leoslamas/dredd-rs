@@ -1,9 +1,9 @@
-use crate::rule::{RuleContextWrapper, Wrapper};
+use crate::rule::{RuleResult, RuleContext, Rule};
 
 pub(crate) mod best_first_rule_runner;
 pub(crate) mod chain_rule_runner;
 
+/// Trait for rule execution strategies
 pub trait RuleRunner {
-    type RuleType;
-    fn run(&self, rule_context: RuleContextWrapper, rules: Vec<Wrapper<Self::RuleType>>);
+    fn run(&self, context: &mut RuleContext, rules: &mut [Box<dyn Rule>]) -> RuleResult<()>;
 }

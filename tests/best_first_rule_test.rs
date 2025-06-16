@@ -1,288 +1,225 @@
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
     use dredd_rs::rule::*;
 
     #[test]
-    fn test_best_first_rule_context() {
+    fn test_best_first_rule_basic_execution() {
         let mut rule = BestFirstRule::new();
-        let mut rule2 = BestFirstRule::new();
+        let mut context = RuleContext::new();
+        
+        // Set up the rule
+        rule.set_eval_fn(|context| {
+            Ok(context.get_bool("should_execute").unwrap_or(true))
+        });
+        
+        rule.set_execute_fn(|context| {
+            context.set_bool("executed", true);
+            Ok(())
+        });
 
-        rule.on_eval(|this| {
-            this.get_rule_context().set("eval_1", true);
-            return *this.get_rule_context().get::<bool>("start").unwrap();
-        })
-        .on_pre_execute(|this| {
-            this.get_rule_context().set("pre_execute_1", true);
-        })
-        .on_execute(|this| {
-            this.get_rule_context().set("execute_1", true);
-        })
-        .on_post_execute(|this| {
-            this.get_rule_context().set("post_execute_1", true);
-        })
-        .add_child(
-            rule2
-                .on_eval(|this| {
-                    this.get_rule_context().set("eval_2", true);
-                    true
-                })
-                .on_pre_execute(|this| {
-                    this.get_rule_context().set("pre_execute_2", true);
-                })
-                .on_execute(|this| {
-                    this.get_rule_context().set("execute_2", true);
-                })
-                .on_post_execute(|this| {
-                    this.get_rule_context().set("post_execute_2", true);
-                }),
-        );
-
-        let mut rule_context = RuleContext::new();
-        rule_context.set("start", true);
-
-        Engine::best_first_runner().run(rule_context.clone(), vec![rule]);
-
-        assert!(*rule_context.get::<bool>("start").unwrap());
-        assert!(*rule_context.get::<bool>("eval_1").unwrap());
-        assert!(*rule_context.get::<bool>("pre_execute_1").unwrap());
-        assert!(*rule_context.get::<bool>("execute_1").unwrap());
-        assert!(*rule_context.get::<bool>("post_execute_1").unwrap());
-        assert!(*rule_context.get::<bool>("eval_2").unwrap());
-        assert!(*rule_context.get::<bool>("pre_execute_2").unwrap());
-        assert!(*rule_context.get::<bool>("execute_2").unwrap());
-        assert!(*rule_context.get::<bool>("post_execute_2").unwrap());
+        // Set up the context
+        context.set_bool("should_execute", true);
+        
+        // Execute the rule
+        let result = rule.fire(&mut context).unwrap();
+        
+        assert!(result);
+        assert_eq!(context.get_bool("executed").unwrap(), true);
     }
 
     #[test]
-    fn test_best_first_rule_should_not_panic_on_default_callbacks() {
-        let mut rule = BestFirstRule::new();
-        let rule2 = BestFirstRule::new();
+    fn test_best_first_rule_with_children() {
+        let mut parent_rule = BestFirstRule::new();
+        let mut child1 = BestFirstRule::new();
+        let mut child2 = BestFirstRule::new();
+        let mut context = RuleContext::new();
+        
+        // Set up parent rule
+        parent_rule.set_eval_fn(|_context| Ok(true));
+        parent_rule.set_execute_fn(|context| {
+            context.set_bool("parent_executed", true);
+            Ok(())
+        });
 
-        rule.add_child(rule2);
+        // Set up first child (should NOT execute)
+        child1.set_eval_fn(|_context| Ok(false));
+        child1.set_execute_fn(|context| {
+            context.set_bool("child1_executed", true);
+            Ok(())
+        });
 
-        Engine::best_first_runner().run(RuleContext::new(), vec![rule]);
+        // Set up second child (should execute)
+        child2.set_eval_fn(|_context| Ok(true));
+        child2.set_execute_fn(|context| {
+            context.set_bool("child2_executed", true);
+            Ok(())
+        });
+
+        // Add children to parent
+        parent_rule.add_child(Box::new(child1)).unwrap();
+        parent_rule.add_child(Box::new(child2)).unwrap();
+        
+        // Execute the rule
+        let result = parent_rule.fire(&mut context).unwrap();
+        
+        assert!(result);
+        assert_eq!(context.get_bool("parent_executed").unwrap(), true);
+        // child1 should not have executed (eval returned false)
+        assert!(context.get_bool("child1_executed").is_err());
+        // child2 should have executed (first child that evaluated to true)
+        assert_eq!(context.get_bool("child2_executed").unwrap(), true);
     }
 
     #[test]
-    fn test_best_first_should_run_child_on_eval_true() {
+    fn test_best_first_rule_evaluation_false() {
         let mut rule = BestFirstRule::new();
-        rule.on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule1", true)); //TRUE
+        let mut context = RuleContext::new();
+        
+        // Set up the rule to not execute
+        rule.set_eval_fn(|_context| Ok(false));
+        
+        rule.set_execute_fn(|context| {
+            context.set_bool("executed", true);
+            Ok(())
+        });
 
-        let mut rule2 = BestFirstRule::new();
-        rule2
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule2", true)); //FALSE
-
-        let mut rule3 = BestFirstRule::new();
-        rule3
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule3", true)); //TRUE
-
-        let mut rule4 = BestFirstRule::new();
-        rule4
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule4", true)); //FALSE
-
-        rule.add_child(rule3);
-        rule2.add_child(rule4);
-
-        let rule_context = RuleContext::new();
-
-        Engine::best_first_runner().run(rule_context.clone(), vec![rule, rule2]);
-
-        assert_eq!(
-            *rule_context.get::<bool>("rule1").unwrap_or(Rc::new(false)),
-            true
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule2").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule3").unwrap_or(Rc::new(false)),
-            true
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule4").unwrap_or(Rc::new(false)),
-            false
-        );
+        // Execute the rule
+        let result = rule.fire(&mut context).unwrap();
+        
+        assert!(!result);
+        // Should not have executed
+        assert!(context.get_bool("executed").is_err());
     }
 
     #[test]
-    fn test_best_first_should_run_sibling_on_eval_false() {
-        let mut rule = BestFirstRule::new();
-        rule.on_eval(|_| false)
-            .on_execute(|this| this.get_rule_context().set("rule1", true)); //FALSE
+    fn test_best_first_rule_multiple_children() {
+        let mut parent_rule = BestFirstRule::new();
+        let mut context = RuleContext::new();
+        
+        // Set up parent rule
+        parent_rule.set_eval_fn(|_context| Ok(true));
+        parent_rule.set_execute_fn(|context| {
+            context.set_bool("parent_executed", true);
+            Ok(())
+        });
 
-        let mut rule2 = BestFirstRule::new();
-        rule2
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule2", true)); //TRUE
+        // Add multiple children - all evaluate to true
+        let mut child1 = BestFirstRule::new();
+        child1.set_eval_fn(|_context| Ok(true));
+        child1.set_execute_fn(|context| {
+            context.set_bool("child1_executed", true);
+            Ok(())
+        });
+        parent_rule.add_child(Box::new(child1)).unwrap();
 
-        let mut rule3 = BestFirstRule::new();
-        rule3
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule3", true)); //FALSE
+        let mut child2 = BestFirstRule::new();
+        child2.set_eval_fn(|_context| Ok(true));
+        child2.set_execute_fn(|context| {
+            context.set_bool("child2_executed", true);
+            Ok(())
+        });
+        parent_rule.add_child(Box::new(child2)).unwrap();
 
-        let mut rule4 = BestFirstRule::new();
-        rule4
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule4", true)); //TRUE
-
-        rule.add_child(rule3);
-        rule2.add_child(rule4);
-
-        let rule_context = RuleContext::new();
-
-        Engine::best_first_runner().run(rule_context.clone(), vec![rule, rule2]);
-
-        assert_eq!(
-            *rule_context.get::<bool>("rule1").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule2").unwrap_or(Rc::new(false)),
-            true
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule3").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule4").unwrap_or(Rc::new(false)),
-            true
-        );
+        let mut child3 = BestFirstRule::new();
+        child3.set_eval_fn(|_context| Ok(true));
+        child3.set_execute_fn(|context| {
+            context.set_bool("child3_executed", true);
+            Ok(())
+        });
+        parent_rule.add_child(Box::new(child3)).unwrap();
+        
+        // Execute the rule
+        let result = parent_rule.fire(&mut context).unwrap();
+        
+        assert!(result);
+        assert_eq!(context.get_bool("parent_executed").unwrap(), true);
+        
+        // In best-first, only the first child that evaluates to true should execute
+        assert_eq!(context.get_bool("child1_executed").unwrap(), true);
+        // The rest should not execute since the first one already did
+        assert!(context.get_bool("child2_executed").is_err());
+        assert!(context.get_bool("child3_executed").is_err());
     }
 
     #[test]
-    fn test_best_first_readme_flow() {
-        // Rule1      Rule2      Rule3
-        //   |
-        // Rule4  ->  Rule5      Rule6
-        //              |
-        // Rule7      Rule8      Rule9
-        //              |
-        // Rule10     Rule11  ->  Rule12
+    fn test_best_first_rule_lifecycle() {
+        let mut rule = BestFirstRule::new();
+        let mut context = RuleContext::new();
+        
+        // Set up the rule with all lifecycle functions
+        rule.set_eval_fn(|_context| Ok(true));
+        
+        rule.set_pre_execute_fn(|context| {
+            context.set_int("order", 1);
+            Ok(())
+        });
+        
+        rule.set_execute_fn(|context| {
+            let current = context.get_int("order").unwrap_or(0);
+            context.set_int("order", current + 1);
+            Ok(())
+        });
+        
+        rule.set_post_execute_fn(|context| {
+            let current = context.get_int("order").unwrap_or(0);
+            context.set_int("order", current + 1);
+            Ok(())
+        });
 
-        let mut rule = BestFirstRule::new()
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule1", true));
+        // Execute the rule
+        let result = rule.fire(&mut context).unwrap();
+        
+        assert!(result);
+        // Should have executed pre (1) + execute (+1=2) + post (+1=3)
+        assert_eq!(context.get_int("order").unwrap(), 3);
+    }
 
-        let mut rule2 = BestFirstRule::new();
-        rule2
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule2", true));
+    #[test]
+    fn test_best_first_no_matching_children() {
+        let mut parent_rule = BestFirstRule::new();
+        let mut context = RuleContext::new();
+        
+        // Set up parent rule
+        parent_rule.set_eval_fn(|_context| Ok(true));
+        parent_rule.set_execute_fn(|context| {
+            context.set_bool("parent_executed", true);
+            Ok(())
+        });
 
-        let mut rule3 = BestFirstRule::new();
-        rule3
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule3", true));
+        // Add children that all evaluate to false
+        let mut child1 = BestFirstRule::new();
+        child1.set_eval_fn(|_context| Ok(false));
+        child1.set_execute_fn(|context| {
+            context.set_bool("child1_executed", true);
+            Ok(())
+        });
+        parent_rule.add_child(Box::new(child1)).unwrap();
 
-        let mut rule4 = BestFirstRule::new();
-        rule4
-            .on_eval(|_| false)
-            .on_execute(|this| this.get_rule_context().set("rule4", true)); //FALSE
+        let mut child2 = BestFirstRule::new();
+        child2.set_eval_fn(|_context| Ok(false));
+        child2.set_execute_fn(|context| {
+            context.set_bool("child2_executed", true);
+            Ok(())
+        });
+        parent_rule.add_child(Box::new(child2)).unwrap();
 
-        let mut rule5 = BestFirstRule::new();
-        rule5
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule5", true));
-
-        let mut rule6 = BestFirstRule::new();
-        rule6
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule6", true));
-
-        let mut rule7 = BestFirstRule::new();
-        rule7
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule7", true));
-
-        let mut rule8 = BestFirstRule::new();
-        rule8
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule8", true));
-
-        let mut rule9 = BestFirstRule::new();
-        rule9
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule9", true));
-
-        let mut rule10 = BestFirstRule::new();
-        rule10
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule10", true));
-
-        let mut rule11 = BestFirstRule::new();
-        rule11
-            .on_eval(|_| false)
-            .on_execute(|this| this.get_rule_context().set("rule11", true)); //FALSE
-
-        let mut rule12 = BestFirstRule::new();
-        rule12
-            .on_eval(|_| true)
-            .on_execute(|this| this.get_rule_context().set("rule12", true));
-
-        rule.add_children(vec![rule4.clone(), rule5.clone(), rule6]);
-        rule4.add_child(rule7.clone());
-        rule5.add_children(vec![rule8.clone(), rule9]);
-        rule7.add_child(rule10);
-        rule8.add_children(vec![rule11, rule12]);
-
-        let rule_context = RuleContext::new();
-
-        Engine::best_first_runner().run(rule_context.clone(), vec![rule, rule2, rule3]);
-
-        assert_eq!(
-            *rule_context.get::<bool>("rule1").unwrap_or(Rc::new(false)), //TRUE
-            true
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule2").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule3").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule4").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule5").unwrap_or(Rc::new(false)), //TRUE
-            true
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule6").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule7").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule8").unwrap_or(Rc::new(false)), //TRUE
-            true
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule9").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule10").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule11").unwrap_or(Rc::new(false)),
-            false
-        );
-        assert_eq!(
-            *rule_context.get::<bool>("rule12").unwrap_or(Rc::new(false)), //TRUE
-            true
-        );
+        let mut child3 = BestFirstRule::new();
+        child3.set_eval_fn(|_context| Ok(false));
+        child3.set_execute_fn(|context| {
+            context.set_bool("child3_executed", true);
+            Ok(())
+        });
+        parent_rule.add_child(Box::new(child3)).unwrap();
+        
+        // Execute the rule
+        let result = parent_rule.fire(&mut context).unwrap();
+        
+        assert!(result);
+        assert_eq!(context.get_bool("parent_executed").unwrap(), true);
+        
+        // No children should have executed since they all evaluated to false
+        assert!(context.get_bool("child1_executed").is_err());
+        assert!(context.get_bool("child2_executed").is_err());
+        assert!(context.get_bool("child3_executed").is_err());
     }
 }

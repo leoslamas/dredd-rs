@@ -1,20 +1,16 @@
-use crate::rule::{chain_rule::ChainRule, Rule, RuleContextWrapper, Wrapper};
+use crate::rule::{Rule, RuleResult, RuleContext};
 
 use super::RuleRunner;
 
+/// ChainRuleRunner executes rules in sequence
 pub struct ChainRuleRunner;
 
 impl RuleRunner for ChainRuleRunner {
-    type RuleType = ChainRule;
-    fn run(&self, rule_context: RuleContextWrapper, rules: Vec<Wrapper<Self::RuleType>>) {
-        if rules.len() <= 1 {
-            if let Some(rule) = rules.first() {
-                let mut rule = rule.borrow_mut();
-                rule.set_rule_context(rule_context);
-                rule.fire();
-            }
-        } else {
-            panic!("ChainRuleRunner does not support sibling rules, only child rules.");
+    fn run(&self, context: &mut RuleContext, rules: &mut [Box<dyn Rule>]) -> RuleResult<()> {
+        // Chain rules execute sequentially
+        for rule in rules {
+            rule.fire(context)?;
         }
+        Ok(())
     }
 }
