@@ -1,9 +1,7 @@
+use crate::rule::{Rule, RuleContext, RuleResult};
 use crate::runner::{
-    best_first_rule_runner::BestFirstRuleRunner, 
-    chain_rule_runner::ChainRuleRunner,
-    RuleRunner,
+    best_first_rule_runner::BestFirstRuleRunner, chain_rule_runner::ChainRuleRunner, RuleRunner,
 };
-use crate::rule::{RuleResult, RuleContext, Rule};
 
 /// The Engine provides convenient methods for rule execution
 pub struct Engine;
@@ -21,17 +19,14 @@ impl Engine {
 
     /// Execute rules using the best-first strategy
     pub fn execute_best_first(
-        context: &mut RuleContext, 
-        rules: &mut [Box<dyn Rule>]
+        context: &mut RuleContext,
+        rules: &mut [Box<dyn Rule>],
     ) -> RuleResult<()> {
         Self::best_first_runner().run(context, rules)
     }
 
     /// Execute rules using the chain strategy
-    pub fn execute_chain(
-        context: &mut RuleContext, 
-        rules: &mut [Box<dyn Rule>]
-    ) -> RuleResult<()> {
+    pub fn execute_chain(context: &mut RuleContext, rules: &mut [Box<dyn Rule>]) -> RuleResult<()> {
         Self::chain_runner().run(context, rules)
     }
 }

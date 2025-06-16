@@ -1,4 +1,4 @@
-use crate::rule::{Rule, RuleResult, RuleContext};
+use crate::rule::{Rule, RuleContext, RuleResult};
 
 use super::RuleRunner;
 

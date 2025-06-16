@@ -1,4 +1,4 @@
-use crate::rule::{Rule, RuleResult, RuleContext, EvalFn, ExecuteFn};
+use crate::rule::{EvalFn, ExecuteFn, Rule, RuleContext, RuleResult};
 
 /// BestFirstRule represents a rule that executes the first child that evaluates to true.
 /// If no child evaluates to true, it tries siblings until one succeeds.
@@ -19,7 +19,7 @@ use crate::rule::{Rule, RuleResult, RuleContext, EvalFn, ExecuteFn};
 ///
 /// let mut context = RuleContext::new();
 /// context.set_bool("should_execute", true);
-/// 
+///
 /// let result = rule.fire(&mut context).unwrap();
 /// assert!(result);
 /// ```
@@ -45,8 +45,8 @@ impl BestFirstRule {
 
     /// Set the evaluation function
     pub fn set_eval_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&RuleContext) -> RuleResult<bool> + 'static
+    where
+        F: Fn(&RuleContext) -> RuleResult<bool> + 'static,
     {
         self.eval_fn = Some(Box::new(f));
         self
@@ -54,8 +54,8 @@ impl BestFirstRule {
 
     /// Set the pre-execution function
     pub fn set_pre_execute_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.pre_execute_fn = Some(Box::new(f));
         self
@@ -63,8 +63,8 @@ impl BestFirstRule {
 
     /// Set the execution function
     pub fn set_execute_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static  
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.execute_fn = Some(Box::new(f));
         self
@@ -72,8 +72,8 @@ impl BestFirstRule {
 
     /// Set the post-execution function
     pub fn set_post_execute_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.post_execute_fn = Some(Box::new(f));
         self
@@ -124,7 +124,7 @@ impl Rule for BestFirstRule {
     fn fire(&mut self, context: &mut RuleContext) -> RuleResult<bool> {
         if self.evaluate(context)? {
             self.execute(context)?;
-            
+
             // Execute the first child that evaluates to true
             for child in &mut self.children {
                 if child.evaluate(context)? {
@@ -132,7 +132,7 @@ impl Rule for BestFirstRule {
                     return Ok(true);
                 }
             }
-            
+
             Ok(true)
         } else {
             Ok(false)

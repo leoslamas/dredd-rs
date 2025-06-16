@@ -6,7 +6,10 @@ pub enum RuleError {
     /// Rule context was not set when required
     ContextNotSet,
     /// Type mismatch when retrieving value from context
-    TypeMismatch { key: &'static str, expected: &'static str },
+    TypeMismatch {
+        key: &'static str,
+        expected: &'static str,
+    },
     /// Too many children added to a rule that supports only one
     TooManyChildren { max: usize, attempted: usize },
     /// Rule execution failed
@@ -23,7 +26,11 @@ impl fmt::Display for RuleError {
                 write!(f, "Type mismatch for key '{}': expected {}", key, expected)
             }
             RuleError::TooManyChildren { max, attempted } => {
-                write!(f, "Too many children: max {} but attempted {}", max, attempted)
+                write!(
+                    f,
+                    "Too many children: max {} but attempted {}",
+                    max, attempted
+                )
             }
             RuleError::ExecutionFailed(msg) => write!(f, "Rule execution failed: {}", msg),
             RuleError::BorrowFailed(msg) => write!(f, "Borrow check failed: {}", msg),
@@ -64,9 +71,9 @@ impl ContextValue {
     pub fn as_bool(&self) -> RuleResult<bool> {
         match self {
             ContextValue::Bool(v) => Ok(*v),
-            _ => Err(RuleError::TypeMismatch { 
-                key: "unknown", 
-                expected: "bool" 
+            _ => Err(RuleError::TypeMismatch {
+                key: "unknown",
+                expected: "bool",
             }),
         }
     }
@@ -75,9 +82,9 @@ impl ContextValue {
     pub fn as_int(&self) -> RuleResult<i64> {
         match self {
             ContextValue::Int(v) => Ok(*v),
-            _ => Err(RuleError::TypeMismatch { 
-                key: "unknown", 
-                expected: "i64" 
+            _ => Err(RuleError::TypeMismatch {
+                key: "unknown",
+                expected: "i64",
             }),
         }
     }
@@ -86,9 +93,9 @@ impl ContextValue {
     pub fn as_float(&self) -> RuleResult<f64> {
         match self {
             ContextValue::Float(v) => Ok(*v),
-            _ => Err(RuleError::TypeMismatch { 
-                key: "unknown", 
-                expected: "f64" 
+            _ => Err(RuleError::TypeMismatch {
+                key: "unknown",
+                expected: "f64",
             }),
         }
     }
@@ -97,9 +104,9 @@ impl ContextValue {
     pub fn as_string(&self) -> RuleResult<&str> {
         match self {
             ContextValue::String(v) => Ok(v),
-            _ => Err(RuleError::TypeMismatch { 
-                key: "unknown", 
-                expected: "String" 
+            _ => Err(RuleError::TypeMismatch {
+                key: "unknown",
+                expected: "String",
             }),
         }
     }
@@ -108,9 +115,9 @@ impl ContextValue {
     pub fn as_bytes(&self) -> RuleResult<&[u8]> {
         match self {
             ContextValue::Bytes(v) => Ok(v),
-            _ => Err(RuleError::TypeMismatch { 
-                key: "unknown", 
-                expected: "Vec<u8>" 
+            _ => Err(RuleError::TypeMismatch {
+                key: "unknown",
+                expected: "Vec<u8>",
             }),
         }
     }
@@ -168,7 +175,10 @@ impl RuleContext {
     pub fn get_bool(&self, key: &'static str) -> RuleResult<bool> {
         self.context_map
             .get(key)
-            .ok_or(RuleError::TypeMismatch { key, expected: "bool" })?
+            .ok_or(RuleError::TypeMismatch {
+                key,
+                expected: "bool",
+            })?
             .as_bool()
     }
 
@@ -176,7 +186,10 @@ impl RuleContext {
     pub fn get_int(&self, key: &'static str) -> RuleResult<i64> {
         self.context_map
             .get(key)
-            .ok_or(RuleError::TypeMismatch { key, expected: "i64" })?
+            .ok_or(RuleError::TypeMismatch {
+                key,
+                expected: "i64",
+            })?
             .as_int()
     }
 
@@ -184,7 +197,10 @@ impl RuleContext {
     pub fn get_float(&self, key: &'static str) -> RuleResult<f64> {
         self.context_map
             .get(key)
-            .ok_or(RuleError::TypeMismatch { key, expected: "f64" })?
+            .ok_or(RuleError::TypeMismatch {
+                key,
+                expected: "f64",
+            })?
             .as_float()
     }
 
@@ -192,7 +208,10 @@ impl RuleContext {
     pub fn get_string(&self, key: &'static str) -> RuleResult<&str> {
         self.context_map
             .get(key)
-            .ok_or(RuleError::TypeMismatch { key, expected: "String" })?
+            .ok_or(RuleError::TypeMismatch {
+                key,
+                expected: "String",
+            })?
             .as_string()
     }
 
@@ -200,7 +219,10 @@ impl RuleContext {
     pub fn get_bytes(&self, key: &'static str) -> RuleResult<&[u8]> {
         self.context_map
             .get(key)
-            .ok_or(RuleError::TypeMismatch { key, expected: "Vec<u8>" })?
+            .ok_or(RuleError::TypeMismatch {
+                key,
+                expected: "Vec<u8>",
+            })?
             .as_bytes()
     }
 
@@ -249,12 +271,12 @@ pub trait Rule {
     fn fire(&mut self, context: &mut RuleContext) -> RuleResult<bool> {
         if self.evaluate(context)? {
             self.execute(context)?;
-            
+
             // Execute children
             for child in self.children_mut() {
                 child.fire(context)?;
             }
-            
+
             Ok(true)
         } else {
             Ok(false)
@@ -283,33 +305,33 @@ impl BaseRule {
     }
 
     /// Set the evaluation function
-    pub fn set_eval_fn<F>(&mut self, f: F) 
-    where 
-        F: Fn(&RuleContext) -> RuleResult<bool> + 'static
+    pub fn set_eval_fn<F>(&mut self, f: F)
+    where
+        F: Fn(&RuleContext) -> RuleResult<bool> + 'static,
     {
         self.eval_fn = Some(Box::new(f));
     }
 
     /// Set the pre-execution function
     pub fn set_pre_execute_fn<F>(&mut self, f: F)
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.pre_execute_fn = Some(Box::new(f));
     }
 
     /// Set the execution function
     pub fn set_execute_fn<F>(&mut self, f: F)
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static  
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.execute_fn = Some(Box::new(f));
     }
 
     /// Set the post-execution function
     pub fn set_post_execute_fn<F>(&mut self, f: F)
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.post_execute_fn = Some(Box::new(f));
     }

@@ -1,4 +1,4 @@
-use crate::rule::{RuleResult, RuleContext, Rule};
+use crate::rule::{Rule, RuleContext, RuleResult};
 
 pub(crate) mod best_first_rule_runner;
 pub(crate) mod chain_rule_runner;

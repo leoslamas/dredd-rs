@@ -1,4 +1,4 @@
-use crate::rule::{Rule, RuleResult, RuleError, RuleContext, EvalFn, ExecuteFn};
+use crate::rule::{EvalFn, ExecuteFn, Rule, RuleContext, RuleError, RuleResult};
 
 /// ChainRule represents a rule that can have at most one child.
 /// When executed, it will run its child rule if the evaluation succeeds.
@@ -19,7 +19,7 @@ use crate::rule::{Rule, RuleResult, RuleError, RuleContext, EvalFn, ExecuteFn};
 ///
 /// let mut context = RuleContext::new();
 /// context.set_bool("should_execute", true);
-/// 
+///
 /// let result = rule.fire(&mut context).unwrap();
 /// assert!(result);
 /// ```
@@ -50,8 +50,8 @@ impl ChainRule {
 
     /// Set the evaluation function
     pub fn set_eval_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&RuleContext) -> RuleResult<bool> + 'static
+    where
+        F: Fn(&RuleContext) -> RuleResult<bool> + 'static,
     {
         self.eval_fn = Some(Box::new(f));
         self
@@ -59,8 +59,8 @@ impl ChainRule {
 
     /// Set the pre-execution function
     pub fn set_pre_execute_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.pre_execute_fn = Some(Box::new(f));
         self
@@ -68,8 +68,8 @@ impl ChainRule {
 
     /// Set the execution function
     pub fn set_execute_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static  
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.execute_fn = Some(Box::new(f));
         self
@@ -77,8 +77,8 @@ impl ChainRule {
 
     /// Set the post-execution function
     pub fn set_post_execute_fn<F>(&mut self, f: F) -> &mut Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.post_execute_fn = Some(Box::new(f));
         self
@@ -87,7 +87,10 @@ impl ChainRule {
     /// Add a child rule (ChainRule can only have one child)
     pub fn set_child(&mut self, child: Box<dyn Rule>) -> RuleResult<&mut Self> {
         if self.child.is_some() {
-            return Err(RuleError::TooManyChildren { max: 1, attempted: 2 });
+            return Err(RuleError::TooManyChildren {
+                max: 1,
+                attempted: 2,
+            });
         }
         self.child = Some(child);
         Ok(self)
@@ -136,7 +139,10 @@ impl Rule for ChainRule {
 
     fn add_child(&mut self, child: Box<dyn Rule>) -> RuleResult<()> {
         if self.child.is_some() {
-            return Err(RuleError::TooManyChildren { max: 1, attempted: 2 });
+            return Err(RuleError::TooManyChildren {
+                max: 1,
+                attempted: 2,
+            });
         }
         self.child = Some(child);
         Ok(())
@@ -146,12 +152,12 @@ impl Rule for ChainRule {
     fn fire(&mut self, context: &mut RuleContext) -> RuleResult<bool> {
         if self.evaluate(context)? {
             self.execute(context)?;
-            
+
             // Execute the single child if it exists
             if let Some(child) = &mut self.child {
                 child.fire(context)?;
             }
-            
+
             Ok(true)
         } else {
             Ok(false)
@@ -180,8 +186,8 @@ impl ChainRuleBuilder {
 
     /// Set the evaluation function
     pub fn eval_fn<F>(mut self, f: F) -> Self
-    where 
-        F: Fn(&RuleContext) -> RuleResult<bool> + 'static
+    where
+        F: Fn(&RuleContext) -> RuleResult<bool> + 'static,
     {
         self.rule.set_eval_fn(f);
         self
@@ -189,8 +195,8 @@ impl ChainRuleBuilder {
 
     /// Set the pre-execution function
     pub fn pre_execute_fn<F>(mut self, f: F) -> Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.rule.set_pre_execute_fn(f);
         self
@@ -198,8 +204,8 @@ impl ChainRuleBuilder {
 
     /// Set the execution function
     pub fn execute_fn<F>(mut self, f: F) -> Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static  
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.rule.set_execute_fn(f);
         self
@@ -207,8 +213,8 @@ impl ChainRuleBuilder {
 
     /// Set the post-execution function
     pub fn post_execute_fn<F>(mut self, f: F) -> Self
-    where 
-        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static
+    where
+        F: Fn(&mut RuleContext) -> RuleResult<()> + 'static,
     {
         self.rule.set_post_execute_fn(f);
         self
