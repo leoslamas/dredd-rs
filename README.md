@@ -24,59 +24,81 @@ When using the `BestFirstRuleRunner`, the rules will be executed so that if `on_
 
 ## Rules
 
-Here are some useful methods for setting up your rules:
+Rules are created using the builder pattern with the following methods:
 
-- `on_eval()` sets the condition that determines whether the rule should execute.
-- `on_execute()` contains the main code the rule should execute.
-- `on_pre_execute()` any actions the rule needs to perform beforehand.
-- `on_post_execute()` any actions the rule should perform afterward.
+- `eval_fn()` sets the condition that determines whether the rule should execute (returns `Result<bool>`).
+- `execute_fn()` contains the main code the rule should execute (returns `Result<()>`).
+- `pre_execute_fn()` any actions the rule needs to perform beforehand (returns `Result<()>`).
+- `post_execute_fn()` any actions the rule should perform afterward (returns `Result<()>`).
 - `add_child()` helper method to add a child rule.
 - `add_children()` helper method to add multiple child rules.
-  
+
+### RuleContext
+
+The `RuleContext` provides type-safe access to shared data:
+
+- `get_bool()`, `set_bool()` - for boolean values
+- `get_string()`, `set_string()` - for string values  
+- `get_i32()`, `set_i32()` - for 32-bit integers
+- `get_f64()`, `set_f64()` - for floating-point numbers
+
 *Notes:*
 
-* You don't need to provide all the callbacks.
+* You don't need to provide all the callbacks - only specify what you need.
 
-* Additionally, you should pass a `RuleContext` during execution, which is a map accessible from within the rules. 
+* All callbacks return `Result<T>` for proper error handling.
 
-* You can even mix runners and call another runner within the execution of a rule, using a new sequence of different rules from any type.
+* You can mix runners and call another runner within the execution of a rule, using a new sequence of different rules from any type.
 
 ## Example
 
 ```rust
 use dredd_rs::rule::*;
+use dredd_rs::context::RuleContext;
+use dredd_rs::engine::Engine;
 
-let mut rule = ChainRule::new();
-let mut rule2 = ChainRule::new();
+// Create rules using the builder pattern
+let mut child_rule = ChainRule::builder()
+    .eval_fn(|context| {
+        println!("Eval Chain Rule 2");
+        Ok(false)
+    })
+    .execute_fn(|context| {
+        println!("Execute Chain Rule 2");
+        Ok(())
+    })
+    .build();
 
-rule.on_eval(|ctx| {
-   println!("Eval Chain Rule 1")
-   let should_run = ctx.get_rule_context().get::<bool>("test").unwrap();
-   should_run //true
-})
-.on_pre_execute(|ctx| {
-   println!("Pre Chain Rule 1");
-})
-.on_execute(|ctx| {
-   println!("Execute Chain Rule 1");
-})
-.on_post_execute(|ctx| {
-   println!("Post Chain Rule 1");
-})
-.add_child(
-   rule2.on_eval(|ctx| {
-      println!("Eval Chain Rule 2")
-      false
-   })
-   .on_execute(|ctx| {
-      println!("Execute Chain Rule 2");
-   })
-);
+let mut parent_rule = ChainRule::builder()
+    .eval_fn(|context| {
+        println!("Eval Chain Rule 1");
+        let should_run = context.get_bool("test").unwrap_or(false);
+        Ok(should_run)
+    })
+    .pre_execute_fn(|context| {
+        println!("Pre Chain Rule 1");
+        Ok(())
+    })
+    .execute_fn(|context| {
+        println!("Execute Chain Rule 1");
+        Ok(())
+    })
+    .post_execute_fn(|context| {
+        println!("Post Chain Rule 1");
+        Ok(())
+    })
+    .build();
 
-let rule_context = RuleContext::new();
-rule_context.set("test", true);
+// Add child rule
+parent_rule.add_child(child_rule);
 
-Engine::ChainRuleRunner.run(rule_context, vec![rule]);
+// Create context with type-safe setters
+let mut context = RuleContext::new();
+context.set_bool("test", true);
+
+// Run with chain runner
+let mut runner = Engine::chain_runner();
+let result = runner.run(&mut context, vec![parent_rule])?;
 ```
 
 Result:
